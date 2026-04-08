@@ -23,13 +23,16 @@ def drop_piece(board, col, player):
     return False
 
 def pop_out(board, col, player):
-    for row in range(ROWS):
-        if board[row][col] == player:
-            for r in range(row, ROWS-1):
-                board[r][col] = board[r+1][col]
-            board[ROWS-1][col] = ' '
-            return True
-    return False
+
+    if board[ROWS - 1][col] != player:
+        return False
+
+    for r in range(ROWS - 1, 0, -1):
+        board[r][col] = board[r - 1][col]
+
+    board[0][col] = " "
+
+    return True
 
 def check_win(board, player):
     # Check horizontal
