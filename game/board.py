@@ -22,7 +22,7 @@ def drop_piece(board, col, player):
             return True
     return False
 
-def pop_out(board, col, player):
+def pop_piece(board, col, player):
 
     if board[ROWS - 1][col] != player:
         return False

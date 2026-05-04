@@ -4,7 +4,7 @@ COLS = 7
 def is_valid_move(board, col):
     return board[0][col] == ' '
 
-def check_win(board, player):
+def check_winner(board, player):
     # Check horizontal
     for row in range(ROWS):
         for col in range(COLS - 3):
