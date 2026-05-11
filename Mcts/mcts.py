@@ -4,12 +4,16 @@ import copy
 
 from mcts.node import Node
 from auxiliares.helpers import get_valid_moves, apply_move, next_player
-from game.logic import check_winner
+from game.logic import check_winner, check_winner_after_pop
 from mcts.heuristica import evaluate_board, is_bad_pop
 
 MAX_SIMULATE_TURNS = 100
 COLUMN_PRIORITY = [3, 2, 4, 1, 5, 0, 6]
 
+
+# ---------------------------------------------------------------------------
+# UCT
+# ---------------------------------------------------------------------------
 
 def uct(node, c=1.4):
     if node.visits == 0:
@@ -19,28 +23,44 @@ def uct(node, c=1.4):
     )
 
 
-def select(node):
+# ---------------------------------------------------------------------------
+# Selecção
+# ---------------------------------------------------------------------------
+
+def select(node, c=1.4):
     while node.children:
         moves = get_valid_moves(node.state, node.player)
         tried = [ch.move for ch in node.children]
         if len(tried) < len(moves):
             return node
-        node = max(node.children, key=lambda n: uct(n))
+        node = max(node.children, key=lambda n: uct(n, c))
     return node
 
+
+# ---------------------------------------------------------------------------
+# Verificação de vitória imediata (suporta pop simultâneo)
+# ---------------------------------------------------------------------------
 
 def check_immediate_win(board, move, player):
     test = copy.deepcopy(board)
     apply_move(test, move, player)
+    move_type = move[0]
+    if move_type == 'pop':
+        # Regra 1: quem faz o pop ganha se ambos ficam com 4-em-linha
+        return check_winner_after_pop(test, player) == player
     return check_winner(test, player)
 
+
+# ---------------------------------------------------------------------------
+# Ordenação de movimentos
+# ---------------------------------------------------------------------------
 
 def order_moves(moves, board, player):
     """
     Ordena e filtra movimentos por qualidade:
     1. Vitória imediata
     2. Bloqueio de vitória adversária
-    3. Drops que prolongam sequências (2+ em linha)
+    3. Drops que prolongam sequências
     4. Drops centrais
     5. Pops razoáveis
     6. Pops maus (descartados)
@@ -51,7 +71,6 @@ def order_moves(moves, board, player):
     for move in moves:
         move_type, col = move
 
-        # Descartar pops prejudiciais
         if move_type == 'pop' and is_bad_pop(board, col, player):
             continue
 
@@ -60,11 +79,10 @@ def order_moves(moves, board, player):
         elif check_immediate_win(board, move, opponent):
             blocks.append(move)
         elif move_type == 'drop':
-            # Verificar se o drop cria/prolonga uma sequência
             test = copy.deepcopy(board)
             apply_move(test, move, player)
             score = evaluate_board(test, player)
-            if score >= 10:  # contribui para sequência
+            if score >= 10:
                 good_drops.append((score, move))
             else:
                 neutral_drops.append(move)
@@ -73,12 +91,14 @@ def order_moves(moves, board, player):
 
     good_drops.sort(key=lambda x: -x[0])
     good_sorted = [m for _, m in good_drops]
-
-    # Ordenar neutral_drops por prioridade de coluna
     neutral_drops.sort(key=lambda m: COLUMN_PRIORITY.index(m[1]) if m[1] < 7 else 99)
 
     return wins + blocks + good_sorted + neutral_drops + pops
 
+
+# ---------------------------------------------------------------------------
+# Expansão
+# ---------------------------------------------------------------------------
 
 def expand(node):
     moves = get_valid_moves(node.state, node.player)
@@ -93,16 +113,16 @@ def expand(node):
             node.children.append(child)
             return child
 
-    return node  # todos expandidos
+    return node
 
+
+# ---------------------------------------------------------------------------
+# Simulação (rollout heurístico)
+# ---------------------------------------------------------------------------
 
 def simulate(state, player):
     """
-    Rollout heurístico:
-    1. Ganhar imediatamente
-    2. Bloquear vitória adversária
-    3. Escolher o melhor move por avaliação de tabuleiro (com ruído)
-    4. Evitar pops maus
+    Rollout heurístico com suporte à Regra 1 (pop simultâneo).
     """
     board = copy.deepcopy(state)
     current = player
@@ -110,7 +130,7 @@ def simulate(state, player):
     for _ in range(MAX_SIMULATE_TURNS):
         moves = get_valid_moves(board, current)
         if not moves:
-            return None
+            return None  # empate
 
         opponent = next_player(current)
 
@@ -120,60 +140,109 @@ def simulate(state, player):
             apply_move(board, win, current)
             return current
 
-        # 2. Bloquear
+        # 2. Bloquear vitória adversária
         block = next((m for m in moves if check_immediate_win(board, m, opponent)), None)
 
         if block:
             chosen = block
         else:
-            # 3. Filtrar pops maus e avaliar os restantes com ruído
             candidates = [m for m in moves
                           if not (m[0] == 'pop' and is_bad_pop(board, m[1], current))]
             if not candidates:
-                candidates = moves  # fallback se todos os pops são maus
+                candidates = moves
 
             scored = []
             for m in candidates:
                 test = copy.deepcopy(board)
                 apply_move(test, m, current)
                 s = evaluate_board(test, current)
-                # Ruído: evita que o rollout seja completamente determinístico
                 s += random.uniform(-5, 5)
                 scored.append((s, m))
 
             scored.sort(key=lambda x: -x[0])
-            # Escolher entre os top 3 para manter diversidade
             top = scored[:3]
             chosen = random.choice(top)[1]
 
         apply_move(board, chosen, current)
-        if check_winner(board, current):
-            return current
+
+        # Verificar vitória com suporte ao pop simultâneo
+        move_type = chosen[0]
+        if move_type == 'pop':
+            winner = check_winner_after_pop(board, current)
+            if winner:
+                return winner
+        else:
+            if check_winner(board, current):
+                return current
+
         current = next_player(current)
 
     return None
 
 
+# ---------------------------------------------------------------------------
+# Backpropagation — CORRIGIDO
+#
+# Lógica anterior: incrementava wins quando winner == node.player, mas
+# node.player é o jogador que vai jogar A PARTIR desse nó, não quem jogou
+# para chegar a ele. O vencedor deve ser comparado com o jogador do NÓ PAI
+# (quem efectivamente fez a jogada que levou a este estado).
+#
+# Lógica corrigida: um nó representa um estado. O jogador que beneficia de
+# uma vitória nesse estado é node.parent.player (quem jogou para chegar aqui).
+# Para simplificar e manter consistência com a selecção por UCT, usamos
+# a perspectiva do root_player: wins conta simulações ganhas pelo root_player,
+# independentemente de qual nó estamos a actualizar.
+# ---------------------------------------------------------------------------
+
 def backpropagate(node, winner, root_player):
     while node:
         node.visits += 1
-        if winner is not None and winner == node.player:
-            node.wins += 1
+        if winner == root_player:
+            # O root_player ganhou esta simulação — é bom para os nós
+            # onde é a vez do root_player jogar (nós pares a partir da raiz)
+            # e mau para os nós do adversário.
+            # Incrementamos wins só nos nós onde node.player == root_player
+            # porque o UCT interpreta wins/visits como taxa de sucesso
+            # do jogador que vai jogar naquele nó.
+            if node.player == root_player:
+                node.wins += 1
+        elif winner is not None:
+            # O adversário ganhou — é bom para os nós onde é a vez do adversário
+            if node.player != root_player:
+                node.wins += 1
         node = node.parent
 
 
-def mcts(board, player, iterations=1000):
+# ---------------------------------------------------------------------------
+# MCTS principal
+# ---------------------------------------------------------------------------
+
+def mcts(board, player, iterations=1000, c=1.4):
+    """
+    Implementação única de MCTS. O comportamento varia com os parâmetros:
+
+      iterations — número de simulações. Mais iterações = decisões mais
+                   informadas, mas mais tempo de computação.
+
+      c          — constante de exploração UCT (Upper Confidence Bound).
+                   Valor alto (ex: 1.4 ≈ √2): explora mais ramos novos.
+                   Valor baixo (ex: 0.8): aprofunda os ramos já prometedores.
+
+    Exemplos de uso no modo PC vs PC:
+      X (explorador):  mcts(board, player, iterations=1000, c=1.4)
+      O (focado):      mcts(board, player, iterations=2000, c=0.8)
+    """
     root = Node(copy.deepcopy(board), player)
 
     for _ in range(iterations):
-        node = select(root)
+        node = select(root, c)
         node = expand(node)
         winner = simulate(node.state, node.player)
         backpropagate(node, winner, player)
 
     if not root.children:
         moves = get_valid_moves(board, player)
-        # Fallback com heurística
         if moves:
             ordered = order_moves(moves, board, player)
             return ordered[0] if ordered else moves[0]

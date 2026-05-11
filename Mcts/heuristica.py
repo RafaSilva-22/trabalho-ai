@@ -97,7 +97,7 @@ def is_bad_pop(board, col, player):
                if c >= 0 and board[base_row][c] == player)
     right = sum(1 for c in range(col + 1, min(COLS, col + 3))
                 if board[base_row][c] == player)
-    if left + right >= 1:  # estava ligada a pelo menos 1 peça horizontalmente
+    if left + right >= 2:  # estava ligada a pelo menos 1 peça horizontalmente
         return True
 
     return False
