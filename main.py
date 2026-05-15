@@ -1,7 +1,7 @@
 from game.board import create_board, ROWS, COLS
 from game.logic import check_winner, check_winner_after_pop, is_board_full, GameState
-from mcts.mcts import mcts
-from mcts.mctsAlternativo import mcts_epsilon_greedy
+from Mcts.mcts import mcts
+from Mcts.mctsAlternativo import mcts_epsilon_greedy
 from auxiliares.helpers import apply_move, next_player, get_valid_moves
 from decision_tree.popout_player import choose_tree_move, train_popout_tree
 
