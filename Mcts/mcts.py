@@ -2,10 +2,10 @@ import math
 import random
 import copy
 
-from mcts.node import Node
+from Mcts.node import Node
 from auxiliares.helpers import get_valid_moves, apply_move, next_player
 from game.logic import check_winner, check_winner_after_pop
-from mcts.heuristica import evaluate_board, is_bad_pop
+from Mcts.heuristica import evaluate_board, is_bad_pop
 
 MAX_SIMULATE_TURNS = 100
 COLUMN_PRIORITY = [3, 2, 4, 1, 5, 0, 6]
@@ -181,36 +181,30 @@ def simulate(state, player):
 
 
 # ---------------------------------------------------------------------------
-# Backpropagation — CORRIGIDO
+# Backpropagation
 #
-# Lógica anterior: incrementava wins quando winner == node.player, mas
-# node.player é o jogador que vai jogar A PARTIR desse nó, não quem jogou
-# para chegar a ele. O vencedor deve ser comparado com o jogador do NÓ PAI
-# (quem efectivamente fez a jogada que levou a este estado).
+# Cada nó representa um estado do jogo. node.player é quem vai jogar
+# A PARTIR desse estado — ou seja, quem jogou para CHEGAR a este estado
+# foi node.parent.player.
 #
-# Lógica corrigida: um nó representa um estado. O jogador que beneficia de
-# uma vitória nesse estado é node.parent.player (quem jogou para chegar aqui).
-# Para simplificar e manter consistência com a selecção por UCT, usamos
-# a perspectiva do root_player: wins conta simulações ganhas pelo root_player,
-# independentemente de qual nó estamos a actualizar.
+# O UCT calcula wins/visits para decidir qual filho explorar. Esse rácio
+# deve reflectir "quão bom foi jogar a jogada que levou a este nó", ou seja,
+# deve ser incrementado quando node.parent.player (quem jogou) ganhou.
+# Como node.parent.player != node.player, a condição simplifica para:
+# winner != node.player.
+#
+# Exemplo:
+#   Raiz: player=X (X vai jogar)
+#   Filho A: player=O (O vai jogar, significa X jogou para chegar aqui)
+#   Se X ganhou → filho A deve ter wins++ (foi X que jogou para aqui)
+#   winner='X' != node.player='O' → condição correcta
 # ---------------------------------------------------------------------------
 
 def backpropagate(node, winner, root_player):
     while node:
         node.visits += 1
-        if winner == root_player:
-            # O root_player ganhou esta simulação — é bom para os nós
-            # onde é a vez do root_player jogar (nós pares a partir da raiz)
-            # e mau para os nós do adversário.
-            # Incrementamos wins só nos nós onde node.player == root_player
-            # porque o UCT interpreta wins/visits como taxa de sucesso
-            # do jogador que vai jogar naquele nó.
-            if node.player == root_player:
-                node.wins += 1
-        elif winner is not None:
-            # O adversário ganhou — é bom para os nós onde é a vez do adversário
-            if node.player != root_player:
-                node.wins += 1
+        if winner is not None and winner != node.player:
+            node.wins += 1
         node = node.parent
 
 

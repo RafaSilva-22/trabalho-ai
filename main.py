@@ -1,6 +1,7 @@
 from game.board import create_board, ROWS, COLS
 from game.logic import check_winner, check_winner_after_pop, is_board_full, GameState
-from mcts.mcts import mcts
+from Mcts.mcts import mcts
+from Mcts.mctsAlternativo import mcts_epsilon_greedy
 from auxiliares.helpers import apply_move, next_player, get_valid_moves
 
 
@@ -123,13 +124,11 @@ def main():
 
         elif mode == "3":
             if player == "X":
-                # MCTS explorador: c alto = explora mais ramos diferentes
-                move = mcts(board, player, iterations=1000, c=1.4)
-                print(f"Computador X (iterations=1000, c=1.4) joga: {move}")
+                move = mcts(board, player, iterations=2000, c=1.4)
+                print(f"Computador X - MCTS UCT (iterations=2000, c=1.4) joga: {move}")
             else:
-                # MCTS focado: mais iterações + c baixo = aprofunda os melhores ramos
-                move = mcts(board, player, iterations=2000, c=0.8)
-                print(f"Computador O (iterations=2000, c=0.8) joga: {move}")
+                move = mcts_epsilon_greedy(board, player, iterations=1000, epsilon=0.2)
+                print(f"Computador O - MCTS ε-greedy (iterations=2000, epsilon=0.2) joga: {move}")
 
         else:
             print("Modo inválido.")
