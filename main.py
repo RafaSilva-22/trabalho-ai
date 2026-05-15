@@ -1,7 +1,7 @@
 from game.board import create_board, ROWS, COLS
 from game.logic import check_winner, check_winner_after_pop, is_board_full, GameState
-from Mcts.mcts import mcts
-from Mcts.mctsAlternativo import mcts_epsilon_greedy
+from mcts.mcts import mcts
+from mcts.mctsAlternativo import mcts_epsilon_greedy
 from auxiliares.helpers import apply_move, next_player, get_valid_moves
 
 
@@ -127,7 +127,7 @@ def main():
                 move = mcts(board, player, iterations=2000, c=1.4)
                 print(f"Computador X - MCTS UCT (iterations=2000, c=1.4) joga: {move}")
             else:
-                move = mcts_epsilon_greedy(board, player, iterations=1000, epsilon=0.2)
+                move = mcts_epsilon_greedy(board, player, iterations=2000, epsilon=0.2)
                 print(f"Computador O - MCTS ε-greedy (iterations=2000, epsilon=0.2) joga: {move}")
 
         else:
