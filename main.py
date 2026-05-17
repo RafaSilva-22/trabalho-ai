@@ -1,8 +1,9 @@
 from game.board import create_board, ROWS, COLS
 from game.logic import check_winner, check_winner_after_pop, is_board_full, GameState
-from mcts.mcts import mcts
-from mcts.mctsAlternativo import mcts_epsilon_greedy
+from Mcts.mcts import mcts
+from Mcts.mctsAlternativo import mcts_epsilon_greedy
 from auxiliares.helpers import apply_move, next_player, get_valid_moves
+from decision_tree.popout_player import choose_tree_move, train_popout_tree
 
 
 def print_board(board):
@@ -15,19 +16,21 @@ def print_board(board):
     print()
 
 
-def get_human_move(board, player):
+def get_human_move(board, player, allowed_moves=None):
+    valid_moves = allowed_moves if allowed_moves is not None else get_valid_moves(board, player)
+
     while True:
         move_type = input("Tipo (drop/pop): ").strip().lower()
         if move_type not in ("drop", "pop"):
-            print("Tipo inválido. Usa 'drop' ou 'pop'.")
+            print("Tipo invalido. Usa 'drop' ou 'pop'.")
             continue
         try:
             col = int(input("Coluna (0-6): "))
         except ValueError:
-            print("Coluna inválida.")
+            print("Coluna invalida.")
             continue
         move = (move_type, col)
-        if move in get_valid_moves(board, player):
+        if move in valid_moves:
             return move
         else:
             print("Jogada inválida. Tenta outra.")
@@ -47,6 +50,7 @@ def check_game_over(board, move, player, game_state, mode):
     """
     move_type = move[0]
     opponent = next_player(player)
+    human_turn = mode == "1" or (mode in ("2", "4") and player == "X")
 
     # Regra 1: pop simultâneo
     if move_type == 'pop':
@@ -60,9 +64,9 @@ def check_game_over(board, move, player, game_state, mode):
     # Regra 3: repetição de estado (qualquer jogador pode declarar empate)
     if game_state.is_threefold_repetition(board):
         print("Estado repetido 3 vezes!")
-        if mode in ("1", "2"):
+        if human_turn:
             # Em modo humano, perguntar se quer declarar empate
-            choice = input("Queres declarar empate por repetição? (s/n): ").strip().lower()
+            choice = input("Queres declarar empate por repeticao? (s/n): ").strip().lower()
             if choice == 's':
                 return ('draw', None)
         else:
@@ -71,7 +75,7 @@ def check_game_over(board, move, player, game_state, mode):
 
     # Regra 2: tabuleiro cheio
     if is_board_full(board):
-        if mode in ("1", "2"):
+        if human_turn:
             print("Tabuleiro cheio!")
             valid = get_valid_moves(board, player)
             pop_moves = [m for m in valid if m[0] == 'pop']
@@ -79,7 +83,7 @@ def check_game_over(board, move, player, game_state, mode):
                 choice = input(f"{player}, queres fazer um pop ou declarar empate? (pop/empate): ").strip().lower()
                 if choice == 'empate':
                     return ('draw', None)
-                # Se escolher pop, o jogo continua — devolve None para o main tratar
+                # Se escolher pop, o jogo continua - devolve None para o main tratar
                 return ('board_full_pop', pop_moves)
             else:
                 return ('draw', None)
@@ -95,8 +99,20 @@ def main():
     print("1 - Jogador vs Jogador")
     print("2 - Jogador vs Computador (MCTS standard)")
     print("3 - Computador vs Computador (MCTS standard vs MCTS agressivo)")
+    print("4 - Jogador vs Computador (Arvore ID3)")
+    print("5 - Computador vs Computador (MCTS vs Arvore ID3)")
 
-    mode = input("Opção: ").strip()
+    mode = input("Opcao: ").strip()
+
+    tree = None
+    if mode in ("4", "5"):
+        try:
+            print("A treinar arvore ID3 com popout_mcts_dataset.csv...")
+            tree = train_popout_tree("popout_mcts_dataset.csv", max_depth=8)
+            print("Arvore ID3 pronta.")
+        except (FileNotFoundError, ValueError) as error:
+            print(error)
+            return
 
     board = create_board()
     player = "X"
@@ -129,6 +145,21 @@ def main():
             else:
                 move = mcts_epsilon_greedy(board, player, iterations=2000, epsilon=0.2)
                 print(f"Computador O - MCTS ε-greedy (iterations=2000, epsilon=0.2) joga: {move}")
+
+        elif mode == "4":
+            if player == "X":
+                move = get_human_move(board, player)
+            else:
+                move = choose_tree_move(board, player, tree)
+                print(f"Computador (Arvore ID3) joga: {move}")
+
+        elif mode == "5":
+            if player == "X":
+                move = mcts(board, player, iterations=1000, c=1.4)
+                print(f"Computador X - MCTS UCT joga: {move}")
+            else:
+                move = choose_tree_move(board, player, tree)
+                print(f"Computador O - Arvore ID3 joga: {move}")
 
         else:
             print("Modo inválido.")

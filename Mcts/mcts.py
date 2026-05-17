@@ -2,10 +2,10 @@ import math
 import random
 import copy
 
-from mcts.node import Node
+from Mcts.node import Node
 from auxiliares.helpers import get_valid_moves, apply_move, next_player
 from game.logic import check_winner, check_winner_after_pop
-from mcts.heuristica import evaluate_board, is_bad_pop
+from Mcts.heuristica import evaluate_board, is_bad_pop
 
 MAX_SIMULATE_TURNS = 100
 COLUMN_PRIORITY = [3, 2, 4, 1, 5, 0, 6]
